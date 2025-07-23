@@ -1,4 +1,7 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
+import os
+
+from serial import SerialException
 
 
 class RequestHandler(BaseHTTPRequestHandler):
@@ -20,9 +23,59 @@ class RequestHandler(BaseHTTPRequestHandler):
             </html>
             '''
 
+    Error_Page = """\
+        <html>
+        <body>
+        <h1>Error accessing {path}</h1>
+        <p>{msg}</p>
+        </body>
+        </html>
+        """
+    # Handle errors by sending a formatted error page.
+    def handle_error(self, msg):
+        content = self.Error_Page.format(path=self.path, msg=msg)
+        self.send_content(content)
+
+    # Send actual content.
+    def send_content(self, content, status=200):
+        self.send_response(status)
+        self.send_header("Content-type", "text/html")
+        if isinstance(content, str):
+            content = content.encode('utf-8')
+        self.send_header("Content-Length", str(len(content)))
+        self.end_headers()
+        self.wfile.write(content)
+
+    def handle_file(self, full_path):
+        try:
+            with open(full_path, 'rb') as reader:
+                content = reader.read()
+            self.send_content(content)
+        except IOError as msg:
+            msg = "'{0}' cannot be read: {1}".format(self.path, msg)
+            self.handle_error(msg)
+
     def do_GET(self):
-            page = self.create_page()
-            self.send_page(page)
+        try:
+
+            # Figure out what exactly is being requested.
+            full_path = os.getcwd() + self.path
+
+            # It doesn't exist...
+            if not os.path.exists(full_path):
+                raise SerialException("'{0}' not found".format(self.path))
+
+            # ...it's a file...
+            elif os.path.isfile(full_path):
+                self.handle_file(full_path)
+
+            # ...it's something we don't handle.
+            else:
+                raise SerialException("Unknown object '{0}'".format(self.path))
+
+        # Handle errors.
+        except Exception as msg:
+            self.handle_error(msg)
     def create_page(self):
         values = {
             'date_time'   : self.date_time_string(),
