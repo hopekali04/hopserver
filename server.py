@@ -1,7 +1,6 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import os
-
-from serial import SerialException
+import subprocess
 
 class base_case(object):
     '''Parent for case handlers.'''
@@ -31,8 +30,7 @@ class case_no_file(object):
         return not os.path.exists(handler.full_path)
 
     def act(self, handler):
-        raise SerialException("'{0}' not found".format(handler.path))
-
+        raise Exception("'{0}' not found".format(handler.path))
 
 class case_existing_file(base_case):
     '''File exists.'''
@@ -50,7 +48,7 @@ class case_always_fail(object):
         return True
 
     def act(self, handler):
-        raise SerialException("Unknown object '{0}'".format(handler.path))
+        raise Exception("Unknown object '{0}'".format(handler.path))
 
 class case_cgi_file(object):
     '''Something runnable.'''
@@ -60,16 +58,19 @@ class case_cgi_file(object):
                handler.full_path.endswith('.py')
 
     def act(self, handler):
-        handler.run_cgi(handler.full_path)
+        self.run_cgi(handler, handler.full_path)
 
     # Run the CGI script.
-    def run_cgi(self, full_path):
-        cmd = "python " + full_path
-        child_stdin, child_stdout = os.popen2(cmd)
-        child_stdin.close()
-        data = child_stdout.read()
-        child_stdout.close()
-        self.send_content(data)
+    def run_cgi(self, handler, full_path):
+        try:
+            proc = subprocess.Popen(['python', full_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = proc.communicate()
+            if proc.returncode != 0:
+                handler.handle_error(stderr.decode())
+            else:
+                handler.send_content(stdout)
+        except Exception as e:
+            handler.handle_error(str(e))
 
 class case_directory_index_file(object):
     '''Serve index.html page for a directory.'''
@@ -181,17 +182,11 @@ class RequestHandler(BaseHTTPRequestHandler):
     
     def do_GET(self):
         try:
-
-            # Figure out what exactly is being requested.
             self.full_path = os.getcwd() + self.path
-
-            # Figure out how to handle it.
             for case in self.Cases:
                 if case.test(self):
                     case.act(self)
                     break
-
-        # Handle errors.
         except Exception as msg:
             self.handle_error(msg)
     def create_page(self):
@@ -212,11 +207,8 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(page.encode('utf-8'))
 
-
-#----------------------------------------------------------------------
-
 if __name__ == '__main__':
-    serverAddress = ('', 8080)
+    serverAddress = ('', 7000)
     print(f'server Started on port {serverAddress[1]}...')
     server = HTTPServer(serverAddress, RequestHandler)
     server.serve_forever()
