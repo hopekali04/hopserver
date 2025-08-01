@@ -1,30 +1,8 @@
-from http.server import BaseHTTPRequestHandler, HTTPServer
-
-
-class RequestHandler(BaseHTTPRequestHandler):
-    '''Handle HTTP requests by returning a fixed 'page'.'''
-
-    # Page to send back.
-    Page = '''\
-            <html>
-            <body>
-            <p>Hello, web!</p>
-            </body>
-            </html>
-        '''
-
-    # Handle a GET request.
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-Type", "text/html")
-        self.send_header("Content-Length", str(len(self.Page)))
-        self.end_headers()
-        self.wfile.write(self.Page.encode('utf-8'))
-
-#----------------------------------------------------------------------
+from http.server import HTTPServer
+from request_handler import RequestHandler
 
 if __name__ == '__main__':
-    serverAddress = ('', 8080)
+    serverAddress = ('', 7000)
     print(f'server Started on port {serverAddress[1]}...')
     server = HTTPServer(serverAddress, RequestHandler)
     server.serve_forever()
