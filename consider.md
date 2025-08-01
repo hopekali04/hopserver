@@ -1,0 +1,1 @@
+Note that we open the file in binary mode—the 'b' in 'rb'—so that Python won't try to "help" us by altering byte sequences that look like a Windows line ending. Note also that reading the whole file into memory when serving it is a bad idea in real life, where the file might be several gigabytes of video data. Handling that situation is outside the scope of this chapter.
