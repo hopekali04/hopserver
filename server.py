@@ -3,10 +3,72 @@ import os
 
 from serial import SerialException
 
+class case_no_file(object):
+    '''File or directory does not exist.'''
+
+    def test(self, handler):
+        return not os.path.exists(handler.full_path)
+
+    def act(self, handler):
+        raise SerialException("'{0}' not found".format(handler.path))
+
+
+class case_existing_file(object):
+    '''File exists.'''
+
+    def test(self, handler):
+        return os.path.isfile(handler.full_path)
+
+    def act(self, handler):
+        handler.handle_file(handler.full_path)
+
+
+class case_always_fail(object):
+    '''Base case if nothing else worked.'''
+
+    def test(self, handler):
+        return True
+
+    def act(self, handler):
+        raise SerialException("Unknown object '{0}'".format(handler.path))
+
+
+class case_directory_index_file(object):
+    '''Serve index.html page for a directory.'''
+
+    def index_path(self, handler):
+        return os.path.join(handler.full_path, 'index.html')
+
+    def test(self, handler):
+        return os.path.isdir(handler.full_path) and \
+               os.path.isfile(self.index_path(handler))
+
+    def act(self, handler):
+        handler.handle_file(self.index_path(handler))
+
+class case_directory_no_index_file(object):
+    '''Serve listing for a directory without an index.html page.'''
+
+    def index_path(self, handler):
+        return os.path.join(handler.full_path, 'index.html')
+
+    def test(self, handler):
+        return os.path.isdir(handler.full_path) and \
+               not os.path.isfile(self.index_path(handler))
+
+    def act(self, handler):
+        handler.list_dir(handler.full_path)
 
 class RequestHandler(BaseHTTPRequestHandler):
-    '''Handle HTTP requests by returning a fixed 'page'.'''
+    '''
+    If the requested path maps to a file, that file is served.
+    If anything goes wrong, an error page is constructed.
+    '''
 
+    Cases = [case_no_file(),
+             case_existing_file(),
+             case_directory_index_file(),
+             case_always_fail()]
     # Page to send back.
     Page = '''\
             <html>
@@ -59,19 +121,14 @@ class RequestHandler(BaseHTTPRequestHandler):
         try:
 
             # Figure out what exactly is being requested.
-            full_path = os.getcwd() + self.path
+            self.full_path = os.getcwd() + self.path
 
-            # It doesn't exist...
-            if not os.path.exists(full_path):
-                raise SerialException("'{0}' not found".format(self.path))
-
-            # ...it's a file...
-            elif os.path.isfile(full_path):
-                self.handle_file(full_path)
-
-            # ...it's something we don't handle.
-            else:
-                raise SerialException("Unknown object '{0}'".format(self.path))
+            # Figure out how to handle it.
+            for case in self.Cases:
+                handler = case()
+                if handler.test(self):
+                    handler.act(self)
+                    break
 
         # Handle errors.
         except Exception as msg:
